@@ -1,0 +1,344 @@
+# Version1
+# 2023年12月12日
+# HydraZZZ
+
+class multidict(dict):
+    def __getitem__(self, item):
+        try:
+            return dict.__getitem__(self, item)
+        except KeyError:
+            value = self[item] = type(self)()
+            return value
+content = multidict()       
+# content={
+#     '7061126' :{}, '7061122':{},   '7061103':{},   '7061125':{},   '7061140' :{},   '7061128' :{},   '7061107' :{},  '7061130' :{},  '7061141':{},   '7060744':{}
+# }
+idarray=[]
+data = []
+city= ['广德','郎溪','宁国','泾县','绩溪']
+"""
+    1.mml运行结果
+    2.
+
+    
+    构造一个结构体
+    {
+        5GID:{
+            RRUname=<string>
+            status=[
+                1//flag of the ENODEBFUNCTION
+                2//flag of the CNOPERATORTA
+                3//flag of the RRU
+                4//flag of the Cell
+                5//BBP
+                6//RRUChain
+                7//RET
+                8//location
+                9//sector
+            ],
+            enodeBid:<num>,
+            target=[
+                [localid,targetid,boolofNB],
+                [targetid,boolofNB]
+            ],
+            RRUid=[]
+            Cellid=[]
+            BBP={
+                id:[]//槽号及对应的工作制式
+            }
+            RRUChain=[]
+            RET={
+                lastid:<num>
+                retid=[]
+            sector=[]
+            location={
+                locationid:[经纬度]
+            }
+            }
+        }
+
+    }
+
+{
+    "NRid":{
+        "localdata":[
+            {
+                "StructID": 工程站号1
+                "SN": 槽号
+                "PN": 光口
+                "RRUnum":设备数
+            },
+            ...
+            {
+                "StructID": 工程站号2
+                "SN": 槽号
+                "PN": 光口
+                "RRUnum":设备数
+            }
+        ]
+        "mmldata":{
+            "RRUname":
+            "eNodeID": 
+            "eNodename":
+            "localltecellID":[]
+            "ltecellID":[]
+		    "localnbcellID":[]
+            "nbcellID":[]
+            "TAC":[
+                [tacnum,type],
+                ...
+            ]
+            "RRUID":[]
+            ""
+        }
+         designdata:{
+            "enlocalcellID": 可用localid
+            "encellID":可用小区号
+            "ennbcellID":可用NB小区号
+        }
+
+    }
+
+}
+
+
+"""
+keyword=["LST ENODEBFUNCTION:;"]
+import json
+import sys
+from openpyxl import Workbook
+import openpyxl
+import re
+import numpy as np
+import time
+
+# can only match the code that header is XC and end with 7 numbers
+def matchNRid(index):
+    # 'XC-'+city+'-[\u4e00-\u9fa5_a-zA-Z0-9()（）]*-\w*-\d{7}
+    fiveID = re.search('^(XC-).*\d{7}$',data[index]).group().split('-')[-1]
+    return fiveID
+
+def ENODEBFUNCTION(index):
+    # match The NR id
+    NRid = matchNRid(index)
+    while not (data[index]=='---    END\n'  and data[index-1] !='仍有后续报告输出\n'):
+        try:
+            
+            print(re.search('^\s+eNodeB名称.*\d{6}$',data[index]).group().replace('/n','').split('-')[-1])
+            content[NRid]['mmldata']['eNodename'] = re.search('^\s+eNodeB名称.*\d{6}$',data[index]).group().replace('/n','').split()[-1]
+            content[NRid]['mmldata']['eNodeID'] = re.search('^\s+eNodeB名称.*\d{6}$',data[index]).group().replace('/n','').split('-')[-1]
+            index=index+1
+        except:
+            index=index+1
+        
+def CNOPERATORTA(index):
+        NRid = matchNRid(index)
+        content[NRid]['mmldata']['TAC']=[]
+        while not (data[index]=='---    END\n'  and data[index-1] !='仍有后续报告输出\n'):
+                try:
+                    re.search('^(\d+\s*){2}\d{5}',data[index]).group().replace('/n','').split('-')[-1]
+                    content[NRid]['mmldata']['TAC'].append([data[index].replace('/n','').split()[0],data[index].replace('/n','').split()[1],data[index].replace('/n','').split()[2]])
+                    index=index+1                
+                except:
+                    index=index+1
+
+
+def RRU(index):
+    NRid = matchNRid(index)
+    if NRid in content.keys():
+        print("the id is mathed")
+        content[NRid]['mmldata']['RRUname']=data[index].replace('\n','')
+        content[NRid]['mmldata']['RRUID']=[]
+    while not (data[index]=='---    END\n'  and data[index-1] !='仍有后续报告输出\n'):
+        try:
+            re.search('^(\d+\s*){3}',data[index]).group()
+            content[NRid]['mmldata']['RRUID'].append(data[index].replace('/n','').split()[1])
+            index=index+1
+        except:
+            index=index+1
+
+
+def Cell(index):
+    NRid = matchNRid(index)
+    while not (data[index]=='---    END\n'  and data[index-1] !='仍有后续报告输出\n'):
+        try:
+            re.search('^\d+\s*XC-',data[index]).group()
+            if data[index].replace('/n','').split()[5]== '否':
+                content[NRid]['mmldata'].setdefault('localltecellID',[]).append(data[index].replace('/n','').split()[0])
+                content[NRid]['mmldata'].setdefault('ltecellID',[]).append(data[index].replace('/n','').split()[13])
+            elif data[index].replace('/n','').split()[5]== '是':
+                content[NRid]['mmldata'].setdefault('localnbcellID',[]).append(data[index].replace('/n','').split()[0])
+                content[NRid]['mmldata'].setdefault('nbcellID',[]).append(data[index].replace('/n','').split()[13])
+            index=index+1
+        except:
+            index=index+1
+
+def readrawfile():
+    print('readrawfile here')
+    global data
+    fd = open('./MML_报文_20231214163409.txt','r')
+    data = fd.readlines()
+    for i in data:
+        if i =='\n':
+            data.remove(i)
+    # fd = open('output.txt','x+')
+    # for i in data:
+    #     fd.write(i)    
+    for index, node in enumerate(data):
+        match node:
+            case "LST ENODEBFUNCTION:;\n":
+                ENODEBFUNCTION(index+1)
+                # print('rew')
+            case "LST CNOPERATORTA:;\n":
+                CNOPERATORTA(index+1)
+                print("Not Found")
+            case "LST RRU:;\n":
+                RRU(index+1)
+            case "LST CELL:;\n":
+                Cell(index+1)
+            case "_":
+                continue
+                
+def myprint():
+    # for key,value in content.items():
+    #     print(key,":",value)
+    for node in content:
+        # print('The local cellid is '+node['cell'][0]+'The logic cellid is '+node['cell'][13])
+        for node1 in content[node]['cell']:
+            print(node1[0],node1[13])
+
+
+
+# 判断是否需要开站
+def Judge():
+    wb = openpyxl.load_workbook('basicsheet.xlsx',data_only=True)
+    win = openpyxl.load_workbook('input.xlsx')
+    # ws = wb.active
+    goalsheet = wb['广德']
+    wins = win.active
+    mrow = goalsheet.max_row
+    mcol = goalsheet.max_column
+    # temp =goalsheet.cell(1,1)
+    # print(temp.value)
+    line = 2
+    for i in range(1,mrow):
+        # print(goalsheet.cell(i,7).value,goalsheet.cell(i,8).value)
+        if goalsheet.cell(i,7).value != None and  goalsheet.cell(i,8).value == None:
+            try:
+                result = re.search('XC-'+'广德'+'-[\u4e00-\u9fa5_a-zA-Z0-9()（）]*-\w*-\d{7}',goalsheet.cell(i,4).value).group()
+                wins['A'+str(line)]=int(result.split('-')[-1])  
+                wins['B'+str(line)]=goalsheet.cell(i,2).value
+                wins['C'+str(line)]=int(goalsheet.cell(i,5).value.replace('槽',''))
+                wins['D'+str(line)]=int(goalsheet.cell(i,6).value)  
+                wins['E'+str(line)]=goalsheet.cell(i,3).internal_value
+                line+=1  
+            except:
+                print(goalsheet.cell(i,4).value)
+                continue
+    win.save('input.xlsx')    
+
+
+def getNodename(structID):
+    ds = openpyxl.load_workbook('design.xlsx')
+    dss=ds.active
+    mrow = dss.max_row
+    for i in range(2,mrow+1):
+        if dss.cell(i,1).value==structID :
+            return dss.cell(i,4).value
+
+
+def readefromInut():
+    print('readefromInut here')
+    wb = openpyxl.load_workbook('input.xlsx')
+    ws = wb.active
+    mrow = ws.max_row
+    mcol = ws.max_column
+    for i  in range(2,mrow+1):
+        # content[ws.cell(i,1).value]['localdata'] =[]
+        # if int(ws.cell(i,mcol).value):
+        #     print('skip '+str(ws.cell(i,1).value))
+        #     continue
+        content[str(ws.cell(i,1).value)].setdefault('localdata',[]).append({
+            "StructID":ws.cell(i,2).value,
+            "SN":ws.cell(i,3).value,
+            "PN":ws.cell(i,4).value,
+            "RRUnum":ws.cell(i,5).value,
+            "NodeName":getNodename(ws.cell(i,2).value)
+        })
+
+
+# def 
+
+def designdata():
+    print('designdata here')
+    NRidlist=(i for i in range(1536,1600))
+    a=[i for i in range(16,32)]
+    b=[i for i in range(144,160)]
+    c=[i for i in range(80,96)]
+    d=[i for i in range(208,224)]
+    LTEidlist=tuple(a+b)
+    NBidlist=tuple(c+d)
+    for node in content:
+        # print(set(map(int, content[node]['mmldata']['cellID'][:])))
+        templte =list(LTEidlist) if len(set(map(int, content[node]['mmldata']['ltecellID'])))==0 else list(set(LTEidlist)-set(map(int, content[node]['mmldata']['ltecellID'][:])))
+        tempnb = list(NBidlist) if len(set(map(int, content[node]['mmldata']['nbcellID'])))==0 else list(set(NBidlist)-set(map(int, content[node]['mmldata']['nbcellID'][:])))
+        templte.sort()
+        tempnb.sort()
+        # print(set(LTEidlist))
+        # print(set(map(int, content[node]['mmldata']['ltecellID'][:])))
+        # print(node +"可用小区号：")
+        # print(max(list(map(int,content[node]['mmldata']['localltecellID']))))
+        # print(content[node]['mmldata']['localltecellID'])
+        # print(content[node]['mmldata']['localnbcellID'])
+        content[node]['designdata']['ennbcellID']=tempnb
+        content[node]['designdata']['encellID']=templte
+        content[node]['designdata']['designletID']=[x+15 if x+15<=31 else x+127 if x+127<=159 else -1 for x in list(map(int,content[node]['mmldata']['localltecellID']))]
+        # print(node,'可用4G小区号',templte)
+        # print(node,'可用NB号',tempnb)
+
+
+def writetoutput():
+    print('writetoutput here')
+    # wb = openpyxl.load_workbook('output.xlsx')
+    # ws=wb['开4G']
+    # ws = wb.active
+    # mrow = ws.max_row
+    # mcol = ws.max_column
+    t=time.gmtime()
+    for key,value in content.items():
+        filename='脚本数据-'+time.strftime("%Y-%m-%d",t)+'-'+key+'-'
+        wb = openpyxl.load_workbook('output.xlsx')
+        ws=wb['开4G']
+        flag = 2
+        print(key,'structID:')
+        localnbcellIDnow=1 if len(list(map(int,value['mmldata']['localltecellID'])))==0 else max(list(map(int,value['mmldata']['localltecellID'])))+1
+        for node in value['localdata']:  
+            for i in range(int(node['RRUnum'])):
+                ws['Q'+str(flag)]= node['StructID']
+                ws['J'+str(flag)]= localnbcellIDnow
+                ws['F'+str(flag)]= node['SN']
+                ws['G'+str(flag)]= node['PN']
+                ws['C'+str(flag)]= int(key)
+                ws['A'+str(flag)]= '广德'
+                flag +=1
+                localnbcellIDnow +=1
+            filename=filename+node['NodeName']+'-'
+        wb.save('./outputs/'+filename+'.xlsx')
+
+
+if __name__ == "__main__":
+    # sys.argv.pop(0)
+    # idarray = sys.argv
+    # for node in idarray:
+    #     content[node]={}
+
+    # Judge()
+
+    readefromInut()
+    readrawfile()
+    designdata()
+    writetoutput()
+
+    # readrawfile()
+        # myprint()
+    # print(content)
